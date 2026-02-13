@@ -1,4 +1,4 @@
-// Message deletion logic - bulk and individual
+// Message deletion logic - delete oldest first
 
 import {
   getChannelMessages,
@@ -15,6 +15,14 @@ function isOlderThanTwoWeeks(message: Message): boolean {
   return messageDate < twoWeeksAgo;
 }
 
+function chunk<T>(array: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < array.length; i += size) {
+    chunks.push(array.slice(i, i + size));
+  }
+  return chunks;
+}
+
 export async function deleteChannelMessages(
   channelId: string,
   onProgress?: (bulk: number, individual: number) => void
@@ -23,48 +31,53 @@ export async function deleteChannelMessages(
   let bulkDeleted = 0;
   let individualDeleted = 0;
 
+  // Phase 1: Fetch ALL messages
+  console.log(`  Fetching all messages...`);
+  const allMessages: Message[] = [];
   let lastMessageId: string | undefined;
   let hasMore = true;
 
   while (hasMore) {
-    const messages = await getChannelMessages(channelId, lastMessageId);
-    console.log(`  Fetched ${messages.length} messages`);
+    const batch = await getChannelMessages(channelId, lastMessageId);
 
-    if (messages.length === 0) {
-      hasMore = false;
+    if (batch.length === 0) {
       break;
     }
 
-    lastMessageId = messages[messages.length - 1]?.id;
+    allMessages.push(...batch);
+    lastMessageId = batch[batch.length - 1]?.id;
 
-    // Split messages by age
-    const recent: string[] = [];
-    const old: Message[] = [];
-
-    for (const msg of messages) {
-      if (isOlderThanTwoWeeks(msg)) {
-        old.push(msg);
-      } else {
-        recent.push(msg.id);
-      }
+    if (batch.length < 100) {
+      hasMore = false;
     }
-    console.log(`  Recent: ${recent.length}, Old: ${old.length}`);
+  }
 
-    // Bulk delete recent messages (2-100 at a time)
-    if (recent.length >= 2) {
-      await bulkDeleteMessages(channelId, recent);
-      bulkDeleted += recent.length;
-      onProgress?.(bulkDeleted, individualDeleted);
-    } else if (recent.length === 1) {
-      // Single recent message - delete individually
-      const deleted = await deleteMessage(channelId, recent[0]!);
-      if (deleted) {
-        individualDeleted += 1;
-        onProgress?.(bulkDeleted, individualDeleted);
-      }
+  console.log(`  Found ${allMessages.length} messages total`);
+
+  if (allMessages.length === 0) {
+    return { bulkDeleted: 0, individualDeleted: 0, timeMs: Date.now() - startTime };
+  }
+
+  // Phase 2: Split by age
+  const old: Message[] = [];
+  const recent: Message[] = [];
+
+  for (const msg of allMessages) {
+    if (isOlderThanTwoWeeks(msg)) {
+      old.push(msg);
+    } else {
+      recent.push(msg);
     }
+  }
 
-    // Delete old messages one by one
+  console.log(`  Old (>2 weeks): ${old.length}, Recent: ${recent.length}`);
+
+  // Phase 3: Sort old by timestamp (oldest first)
+  old.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+  // Phase 4: Delete old messages individually (oldest first)
+  if (old.length > 0) {
+    console.log(`  Deleting old messages (oldest first)...`);
     for (const msg of old) {
       const deleted = await deleteMessage(channelId, msg.id);
       if (deleted) {
@@ -72,10 +85,26 @@ export async function deleteChannelMessages(
         onProgress?.(bulkDeleted, individualDeleted);
       }
     }
+  }
 
-    // If we got fewer than 100 messages, we've reached the end
-    if (messages.length < 100) {
-      hasMore = false;
+  // Phase 5: Bulk delete recent messages in batches of 100
+  if (recent.length > 0) {
+    console.log(`  Bulk deleting recent messages...`);
+    const batches = chunk(recent, 100);
+
+    for (const batch of batches) {
+      if (batch.length >= 2) {
+        await bulkDeleteMessages(channelId, batch.map((m) => m.id));
+        bulkDeleted += batch.length;
+        onProgress?.(bulkDeleted, individualDeleted);
+      } else if (batch.length === 1) {
+        // Single message - delete individually
+        const deleted = await deleteMessage(channelId, batch[0]!.id);
+        if (deleted) {
+          individualDeleted += 1;
+          onProgress?.(bulkDeleted, individualDeleted);
+        }
+      }
     }
   }
 
