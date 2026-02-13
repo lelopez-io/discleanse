@@ -5,15 +5,19 @@ import {
   deleteMessage,
   bulkDeleteMessages,
 } from "../discord/client";
-import type { Message } from "../discord/types";
 
 const TWO_WEEKS_MS = 14 * 24 * 60 * 60 * 1000;
 export const DELETE_DELAY_MS = 1100; // ~1/sec for individual deletes
 
-function isOlderThanTwoWeeks(message: Message): boolean {
-  const messageDate = new Date(message.timestamp).getTime();
+// Minimal data we need - just ID and timestamp, nothing else
+interface MessageRef {
+  id: string;
+  timestamp: number;
+}
+
+function isOlderThanTwoWeeks(timestamp: number): boolean {
   const twoWeeksAgo = Date.now() - TWO_WEEKS_MS;
-  return messageDate < twoWeeksAgo;
+  return timestamp < twoWeeksAgo;
 }
 
 function chunk<T>(array: T[], size: number): T[][] {
@@ -27,16 +31,18 @@ function chunk<T>(array: T[], size: number): T[][] {
 export interface ChannelMessages {
   channelId: string;
   channelName: string;
-  recent: Message[];
-  old: Message[];
+  recent: MessageRef[];
+  old: MessageRef[];
 }
 
 // Phase 1: Fetch all messages and categorize by age
+// Only keeps id + timestamp in memory, discards everything else
 export async function fetchChannelMessages(
   channelId: string,
   channelName: string
 ): Promise<ChannelMessages> {
-  const allMessages: Message[] = [];
+  const old: MessageRef[] = [];
+  const recent: MessageRef[] = [];
   let lastMessageId: string | undefined;
   let hasMore = true;
 
@@ -47,22 +53,24 @@ export async function fetchChannelMessages(
       break;
     }
 
-    allMessages.push(...batch);
+    // Extract only what we need, discard the rest immediately
+    for (const msg of batch) {
+      const ref: MessageRef = {
+        id: msg.id,
+        timestamp: new Date(msg.timestamp).getTime(),
+      };
+
+      if (isOlderThanTwoWeeks(ref.timestamp)) {
+        old.push(ref);
+      } else {
+        recent.push(ref);
+      }
+    }
+
     lastMessageId = batch[batch.length - 1]?.id;
 
     if (batch.length < 100) {
       hasMore = false;
-    }
-  }
-
-  const old: Message[] = [];
-  const recent: Message[] = [];
-
-  for (const msg of allMessages) {
-    if (isOlderThanTwoWeeks(msg)) {
-      old.push(msg);
-    } else {
-      recent.push(msg);
     }
   }
 
@@ -72,7 +80,7 @@ export async function fetchChannelMessages(
 // Phase 2: Bulk delete recent messages (fast)
 export async function bulkDeleteRecent(
   channelId: string,
-  recent: Message[],
+  recent: MessageRef[],
   onProgress?: (deleted: number) => void
 ): Promise<number> {
   if (recent.length === 0) return 0;
@@ -100,7 +108,7 @@ export async function bulkDeleteRecent(
 // Phase 3: Individual delete old messages (slow)
 export async function deleteOldMessages(
   channelId: string,
-  old: Message[],
+  old: MessageRef[],
   onProgress?: (deleted: number, remaining: number) => void
 ): Promise<number> {
   if (old.length === 0) return 0;
