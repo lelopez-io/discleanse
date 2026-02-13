@@ -4,37 +4,34 @@ CLI tool to cleanse a Discord server before leaving the platform. Deletes all me
 
 ## Setup
 
-### 1. Create a Discord Bot
-
-1. Go to [discord.com/developers/applications](https://discord.com/developers/applications)
-2. Click **New Application**, give it a name
-3. Go to **Bot** section in the sidebar
-4. Click **Reset Token** and copy it — this is your `DISCORD_TOKEN`
-
-### 2. Invite the Bot to Your Server
-
-1. Go to **OAuth2** in the sidebar, then scroll to **URL Generator**
-2. Under **Scopes**, check `bot`
-3. Under **Bot Permissions**, check `Administrator`
-4. Copy the generated URL at the bottom
-5. Open the URL in your browser and select your server
-
-### 3. Get Your Server ID
-
-1. In Discord, enable Developer Mode (Settings → App Settings → Advanced → Developer Mode)
-2. Right-click your server name → **Copy Server ID** — this is your `DISCORD_GUILD_ID`
-
-### 4. Configure Environment
+### 1. Configure Environment
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` with your values:
-```
-DISCORD_TOKEN=your_bot_token_here
-DISCORD_GUILD_ID=your_server_id_here
-```
+### 2. Create a Discord Bot
+
+1. Go to [discord.com/developers/applications](https://discord.com/developers/applications)
+2. Click **New Application**, give it a name
+3. Go to **Bot** section in the sidebar
+4. Click **Reset Token** and copy it
+5. Paste into `.env` as `DISCORD_TOKEN`
+
+### 3. Get Your Server ID
+
+1. In Discord, enable Developer Mode (Settings → App Settings → Advanced → Developer Mode)
+2. Right-click your server name → **Copy Server ID**
+3. Paste into `.env` as `DISCORD_GUILD_ID`
+
+### 4. Invite the Bot to Your Server
+
+1. Back in the Discord Developer Portal, go to **OAuth2** in the sidebar
+2. Scroll to **URL Generator**
+3. Under **Scopes**, check `bot`
+4. Under **Bot Permissions**, check `Administrator`
+5. Copy the generated URL at the bottom
+6. Open the URL in your browser and select your server
 
 ## Usage
 
