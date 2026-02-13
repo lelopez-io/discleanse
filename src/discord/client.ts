@@ -89,10 +89,19 @@ export async function getChannelMessages(
 export async function deleteMessage(
   channelId: string,
   messageId: string
-): Promise<void> {
+): Promise<boolean> {
   // Conservative rate limiting for individual deletes (~3/sec)
   await sleep(350);
-  return request<void>("DELETE", `/channels/${channelId}/messages/${messageId}`);
+  try {
+    await request<void>("DELETE", `/channels/${channelId}/messages/${messageId}`);
+    return true;
+  } catch (error) {
+    // Skip system messages that can't be deleted (code 50021)
+    if (error instanceof Error && error.message.includes("50021")) {
+      return false;
+    }
+    throw error;
+  }
 }
 
 export async function bulkDeleteMessages(

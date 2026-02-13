@@ -55,16 +55,20 @@ export async function deleteChannelMessages(
       onProgress?.(bulkDeleted, individualDeleted);
     } else if (recent.length === 1) {
       // Single recent message - delete individually
-      await deleteMessage(channelId, recent[0]!);
-      individualDeleted += 1;
-      onProgress?.(bulkDeleted, individualDeleted);
+      const deleted = await deleteMessage(channelId, recent[0]!);
+      if (deleted) {
+        individualDeleted += 1;
+        onProgress?.(bulkDeleted, individualDeleted);
+      }
     }
 
     // Delete old messages one by one
     for (const msg of old) {
-      await deleteMessage(channelId, msg.id);
-      individualDeleted += 1;
-      onProgress?.(bulkDeleted, individualDeleted);
+      const deleted = await deleteMessage(channelId, msg.id);
+      if (deleted) {
+        individualDeleted += 1;
+        onProgress?.(bulkDeleted, individualDeleted);
+      }
     }
 
     // If we got fewer than 100 messages, we've reached the end
