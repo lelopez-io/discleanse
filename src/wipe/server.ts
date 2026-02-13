@@ -1,7 +1,6 @@
-// Server-wide orchestration - three-pass approach
+// Server-wide orchestration - two-pass approach with recursive cleanup
 // Pass 1: Bulk delete recent messages in ALL channels (fast)
-// Pass 2: Individual delete old messages (slow, leaves first: small threads → small channels)
-// Pass 3: Delete all channels
+// Pass 2: Individual delete old messages + delete node when empty (leaves first)
 
 import {
   getGuild,
@@ -185,14 +184,16 @@ export async function cleanseServer(guildId: string): Promise<void> {
   console.log(`\nBulk phase complete: ${bulkDeleted} messages deleted\n`);
 
   // ═══════════════════════════════════════════════════════════════════
-  // PHASE 3: Individual delete old messages (slow, leaves first)
+  // PHASE 3: Delete old messages + cleanup (leaves first, recursive style)
   // ═══════════════════════════════════════════════════════════════════
   console.log(`${"═".repeat(60)}`);
-  console.log(`PHASE 3: Deleting ${totalOld} old messages individually (threads first)`);
+  console.log(`PHASE 3: Deleting ${totalOld} old messages (leaves first, cleanup as we go)`);
   console.log(`${"═".repeat(60)}\n`);
 
   let individualDeleted = 0;
   let remainingTotal = totalOld;
+  let threadsDeleted = 0;
+  let channelsDeleted = 0;
 
   // Leaves first: threads sorted by old count (smallest first), then channels sorted by old count
   const threads = allTargets
@@ -202,36 +203,54 @@ export async function cleanseServer(guildId: string): Promise<void> {
     .filter((t) => !t.isThread)
     .sort((a, b) => (a.messages?.old.length ?? 0) - (b.messages?.old.length ?? 0));
 
-  for (const target of [...threads, ...channels]) {
-    if (!target.messages || target.messages.old.length === 0) continue;
+  // Process threads first (leaves)
+  for (const target of threads) {
+    const oldCount = target.messages?.old.length ?? 0;
 
-    const { old } = target.messages;
+    if (oldCount > 0) {
+      const { old } = target.messages!;
 
-    const deleted = await deleteOldMessages(target.id, old, (count, remaining) => {
-      const globalRemaining = remainingTotal - count;
-      const etaStr = formatEta(globalRemaining * (DELETE_DELAY_MS / 1000));
-      process.stdout.write(
-        `\r${target.name}: ${count}/${old.length} | Total remaining: ${globalRemaining} | ETA: ${etaStr}   `
-      );
-    });
+      const deleted = await deleteOldMessages(target.id, old, (count, remaining) => {
+        const globalRemaining = remainingTotal - count;
+        const etaStr = formatEta(globalRemaining * (DELETE_DELAY_MS / 1000));
+        process.stdout.write(
+          `\r${target.name}: ${count}/${old.length} | Remaining: ${globalRemaining} | ETA: ${etaStr}   `
+        );
+      });
 
-    individualDeleted += deleted;
-    remainingTotal -= deleted;
-    process.stdout.write(`\r${target.name}: ${deleted} deleted${" ".repeat(40)}\n`);
+      individualDeleted += deleted;
+      remainingTotal -= deleted;
+      process.stdout.write(`\r${target.name}: ${deleted} deleted${" ".repeat(30)}\n`);
+    }
+
+    // Thread is now empty (leaf) - but threads auto-delete with parent, so just track it
+    threadsDeleted++;
   }
 
-  console.log(`\nIndividual phase complete: ${individualDeleted} messages deleted\n`);
+  // Process channels (delete each after emptying)
+  for (const target of channels) {
+    const oldCount = target.messages?.old.length ?? 0;
 
-  // ═══════════════════════════════════════════════════════════════════
-  // PHASE 4: Delete channels (threads auto-deleted with parent)
-  // ═══════════════════════════════════════════════════════════════════
-  console.log(`${"═".repeat(60)}`);
-  console.log(`PHASE 4: Deleting ${textChannels.length} channels`);
-  console.log(`${"═".repeat(60)}\n`);
+    if (oldCount > 0) {
+      const { old } = target.messages!;
 
-  for (const channel of textChannels) {
-    await deleteChannel(channel.id);
-    console.log(`Deleted #${channel.name}`);
+      const deleted = await deleteOldMessages(target.id, old, (count, remaining) => {
+        const globalRemaining = remainingTotal - count;
+        const etaStr = formatEta(globalRemaining * (DELETE_DELAY_MS / 1000));
+        process.stdout.write(
+          `\r${target.name}: ${count}/${old.length} | Remaining: ${globalRemaining} | ETA: ${etaStr}   `
+        );
+      });
+
+      individualDeleted += deleted;
+      remainingTotal -= deleted;
+      process.stdout.write(`\r${target.name}: ${deleted} deleted${" ".repeat(30)}\n`);
+    }
+
+    // Channel is now empty (leaf) - delete it
+    await deleteChannel(target.id);
+    console.log(`  → deleted ${target.name}`);
+    channelsDeleted++;
   }
 
   // Final summary
@@ -242,7 +261,7 @@ export async function cleanseServer(guildId: string): Promise<void> {
   console.log(`COMPLETE`);
   console.log(`${"═".repeat(60)}`);
   console.log(`Messages: ${totalMessages.toLocaleString()} (${bulkDeleted} bulk + ${individualDeleted} individual)`);
-  console.log(`Channels: ${textChannels.length} deleted`);
-  console.log(`Threads: ${allThreads.length} deleted`);
+  console.log(`Channels: ${channelsDeleted} deleted`);
+  console.log(`Threads: ${threadsDeleted} cleaned`);
   console.log(`Time: ${formatTime(totalTime)}`);
 }
