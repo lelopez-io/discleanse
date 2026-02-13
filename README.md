@@ -1,15 +1,62 @@
 # discleanse
 
-To install dependencies:
+CLI tool to cleanse a Discord server before leaving the platform. Deletes all messages and channels.
+
+## Setup
+
+### 1. Create a Discord Bot
+
+1. Go to [discord.com/developers/applications](https://discord.com/developers/applications)
+2. Click **New Application**, give it a name
+3. Go to **Bot** section in the sidebar
+4. Click **Reset Token** and copy it — this is your `DISCORD_TOKEN`
+
+### 2. Invite the Bot to Your Server
+
+1. Go to **OAuth2 → URL Generator** in the sidebar
+2. Under **Scopes**, check `bot`
+3. Under **Bot Permissions**, check `Administrator`
+4. Copy the generated URL at the bottom
+5. Open the URL in your browser and select your server
+
+### 3. Get Your Server ID
+
+1. In Discord, enable Developer Mode (Settings → App Settings → Advanced → Developer Mode)
+2. Right-click your server name → **Copy Server ID** — this is your `DISCORD_GUILD_ID`
+
+### 4. Configure Environment
 
 ```bash
-bun install
+cp .env.example .env
 ```
 
-To run:
+Edit `.env` with your values:
+```
+DISCORD_TOKEN=your_bot_token_here
+DISCORD_GUILD_ID=your_server_id_here
+```
+
+## Usage
 
 ```bash
-bun run index.ts
+bun run src/index.ts
 ```
 
-This project was created using `bun init` in bun v1.3.3. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
+The tool will:
+1. Connect to your server
+2. Find all text channels
+3. Sort by message count (smallest first, "general" last)
+4. Delete all messages in each channel
+5. Delete the channels themselves
+6. Print a summary
+
+## How It Works
+
+- **Bulk delete**: Messages less than 2 weeks old are deleted in batches of 100
+- **Individual delete**: Older messages are deleted one by one (~3/sec due to rate limits)
+- **Rate limiting**: Automatically handles Discord's rate limits with retries
+
+## Requirements
+
+- [Bun](https://bun.sh) runtime
+- You must be the server owner (or have a bot with Administrator permission)
