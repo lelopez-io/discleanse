@@ -44,17 +44,19 @@ bun run src/index.ts
 
 The tool will:
 1. Connect to your server
-2. Find all text channels
+2. Find all text channels and threads
 3. Sort by message count (smallest first, "general" last)
-4. Delete all messages in each channel
-5. Delete the channels themselves
-6. Print a summary
+4. For each channel: wipe threads first, then the channel, then delete
+5. Print a summary
 
 ## How It Works
 
-- **Bulk delete**: Messages less than 2 weeks old are deleted in batches of 100
-- **Individual delete**: Older messages are deleted one by one (~3/sec due to rate limits)
+- **Tree traversal**: Messages in threads → messages in channels → delete channels
+- **Oldest first**: Old messages (>2 weeks) are deleted first, then recent ones
+- **Bulk delete**: Recent messages (<2 weeks) are deleted in batches of 100
+- **Individual delete**: Older messages are deleted one by one (~3/sec)
 - **Rate limiting**: Automatically handles Discord's rate limits with retries
+- **Threads**: Handles active and archived threads (public + private)
 
 ## Requirements
 
