@@ -1,6 +1,6 @@
 // Server-wide orchestration - three-pass approach
 // Pass 1: Bulk delete recent messages in ALL channels (fast)
-// Pass 2: Individual delete old messages in ALL channels (slow)
+// Pass 2: Individual delete old messages (slow, leaves first: small threads → small channels)
 // Pass 3: Delete all channels
 
 import {
@@ -194,9 +194,13 @@ export async function cleanseServer(guildId: string): Promise<void> {
   let individualDeleted = 0;
   let remainingTotal = totalOld;
 
-  // Threads first (leaves)
-  const threads = allTargets.filter((t) => t.isThread);
-  const channels = allTargets.filter((t) => !t.isThread);
+  // Leaves first: threads sorted by old count (smallest first), then channels sorted by old count
+  const threads = allTargets
+    .filter((t) => t.isThread)
+    .sort((a, b) => (a.messages?.old.length ?? 0) - (b.messages?.old.length ?? 0));
+  const channels = allTargets
+    .filter((t) => !t.isThread)
+    .sort((a, b) => (a.messages?.old.length ?? 0) - (b.messages?.old.length ?? 0));
 
   for (const target of [...threads, ...channels]) {
     if (!target.messages || target.messages.old.length === 0) continue;
