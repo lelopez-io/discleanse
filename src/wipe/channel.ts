@@ -15,7 +15,7 @@ export async function estimateMessageCount(channelId: string): Promise<number> {
 export async function wipeChannel(
   channelId: string,
   channelName: string,
-  onProgress?: (bulk: number, individual: number) => void
+  onProgress?: (bulk: number, individual: number, eta: string) => void
 ): Promise<ChannelStats> {
   const stats = await deleteChannelMessages(channelId, onProgress);
 
@@ -33,7 +33,7 @@ export async function wipeChannel(
 export async function wipeThreadMessages(
   threadId: string,
   threadName: string,
-  onProgress?: (bulk: number, individual: number) => void
+  onProgress?: (bulk: number, individual: number, eta: string) => void
 ): Promise<ChannelStats> {
   // Unarchive thread first (archived threads can't be modified)
   try {

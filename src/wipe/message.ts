@@ -1,4 +1,4 @@
-// Message deletion logic - delete oldest first
+// Message deletion logic - bulk delete first, then old messages
 
 import {
   getChannelMessages,
@@ -8,6 +8,7 @@ import {
 import type { Message, DeleteStats } from "../discord/types";
 
 const TWO_WEEKS_MS = 14 * 24 * 60 * 60 * 1000;
+const DELETE_DELAY_MS = 1100; // ~1/sec for individual deletes
 
 function isOlderThanTwoWeeks(message: Message): boolean {
   const messageDate = new Date(message.timestamp).getTime();
@@ -23,9 +24,18 @@ function chunk<T>(array: T[], size: number): T[][] {
   return chunks;
 }
 
+function formatEta(seconds: number): string {
+  if (seconds < 60) return `${Math.ceil(seconds)}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return `${hours}h ${remainingMinutes}m`;
+}
+
 export async function deleteChannelMessages(
   channelId: string,
-  onProgress?: (bulk: number, individual: number) => void
+  onProgress?: (bulk: number, individual: number, eta: string) => void
 ): Promise<DeleteStats> {
   const startTime = Date.now();
   let bulkDeleted = 0;
@@ -70,24 +80,13 @@ export async function deleteChannelMessages(
     }
   }
 
-  console.log(`  Old (>2 weeks): ${old.length}, Recent: ${recent.length}`);
+  console.log(`  Recent (<2 weeks): ${recent.length}, Old: ${old.length}`);
 
-  // Phase 3: Sort old by timestamp (oldest first)
-  old.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+  // Calculate ETA based on old messages (bulk is fast, old is slow)
+  const estimatedSeconds = old.length * (DELETE_DELAY_MS / 1000);
+  console.log(`  ETA: ${formatEta(estimatedSeconds)} (for ${old.length} old messages)`);
 
-  // Phase 4: Delete old messages individually (oldest first)
-  if (old.length > 0) {
-    console.log(`  Deleting old messages (oldest first)...`);
-    for (const msg of old) {
-      const deleted = await deleteMessage(channelId, msg.id);
-      if (deleted) {
-        individualDeleted += 1;
-        onProgress?.(bulkDeleted, individualDeleted);
-      }
-    }
-  }
-
-  // Phase 5: Bulk delete recent messages in batches of 100
+  // Phase 3: Bulk delete recent messages first (fast!)
   if (recent.length > 0) {
     console.log(`  Bulk deleting recent messages...`);
     const batches = chunk(recent, 100);
@@ -96,14 +95,30 @@ export async function deleteChannelMessages(
       if (batch.length >= 2) {
         await bulkDeleteMessages(channelId, batch.map((m) => m.id));
         bulkDeleted += batch.length;
-        onProgress?.(bulkDeleted, individualDeleted);
+        const remainingOld = old.length;
+        const eta = formatEta(remainingOld * (DELETE_DELAY_MS / 1000));
+        onProgress?.(bulkDeleted, individualDeleted, eta);
       } else if (batch.length === 1) {
-        // Single message - delete individually
         const deleted = await deleteMessage(channelId, batch[0]!.id);
         if (deleted) {
           individualDeleted += 1;
-          onProgress?.(bulkDeleted, individualDeleted);
+          onProgress?.(bulkDeleted, individualDeleted, "");
         }
+      }
+    }
+  }
+
+  // Phase 4: Delete old messages individually
+  if (old.length > 0) {
+    console.log(`  Deleting old messages individually...`);
+    for (let i = 0; i < old.length; i++) {
+      const msg = old[i]!;
+      const deleted = await deleteMessage(channelId, msg.id);
+      if (deleted) {
+        individualDeleted += 1;
+        const remaining = old.length - (i + 1);
+        const eta = formatEta(remaining * (DELETE_DELAY_MS / 1000));
+        onProgress?.(bulkDeleted, individualDeleted, eta);
       }
     }
   }

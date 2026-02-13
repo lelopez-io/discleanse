@@ -153,8 +153,9 @@ export async function cleanseServer(guildId: string): Promise<void> {
       const threadStats = await wipeThreadMessages(
         thread.id,
         thread.name,
-        (bulk, ind) => {
-          process.stdout.write(`\r     Deleted: ${bulk} bulk, ${ind} individual`);
+        (bulk, ind, eta) => {
+          const etaText = eta ? ` | ETA: ${eta}` : "";
+          process.stdout.write(`\r     Deleted: ${bulk} bulk, ${ind} individual${etaText}`);
         }
       );
 
@@ -172,8 +173,9 @@ export async function cleanseServer(guildId: string): Promise<void> {
     const channelStats = await wipeChannel(
       channel.id,
       channel.name,
-      (bulk, ind) => {
-        process.stdout.write(`\r  Deleted: ${bulk} bulk, ${ind} individual`);
+      (bulk, ind, eta) => {
+        const etaText = eta ? ` | ETA: ${eta}` : "";
+        process.stdout.write(`\r  Deleted: ${bulk} bulk, ${ind} individual${etaText}`);
       }
     );
 
