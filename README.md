@@ -13,7 +13,7 @@ CLI tool to cleanse a Discord server before leaving the platform. Deletes all me
 
 ### 2. Invite the Bot to Your Server
 
-1. Go to **OAuth2 → URL Generator** in the sidebar
+1. Go to **OAuth2** in the sidebar, then scroll to **URL Generator**
 2. Under **Scopes**, check `bot`
 3. Under **Bot Permissions**, check `Administrator`
 4. Copy the generated URL at the bottom
