@@ -1,4 +1,4 @@
-// Server-wide orchestration
+// Server-wide orchestration - tree traversal (leaves first)
 
 import {
   getGuild,
@@ -12,12 +12,12 @@ import {
   ChannelType,
   type Channel,
   type Thread,
-  type ChannelStats,
 } from "../discord/types";
 
 interface ChannelWithEstimate {
   channel: Channel;
   estimate: number;
+  threads: ThreadWithEstimate[];
 }
 
 interface ThreadWithEstimate {
@@ -51,10 +51,12 @@ async function fetchAllThreads(
   const threads: Thread[] = [];
 
   // Get active threads
+  console.log("  Fetching active threads...");
   const active = await getActiveThreads(guildId);
   threads.push(...active.threads);
 
   // Get archived threads for each text-based channel
+  console.log("  Fetching archived threads...");
   for (const channel of channels) {
     try {
       const publicArchived = await getArchivedPublicThreads(channel.id);
@@ -78,107 +80,116 @@ export async function cleanseServer(guildId: string): Promise<void> {
   // Validate access
   const guild = await getGuild(guildId);
   console.log(`\ndiscleanse - Starting...`);
-  console.log(`Guild: ${guild.name} (${guild.id})`);
+  console.log(`Guild: ${guild.name} (${guild.id})\n`);
 
   // Get all text-based channels
   const allChannels = await getGuildChannels(guildId);
   const textChannels = allChannels.filter((c) => isTextBasedChannel(c.type));
-
   console.log(`Found ${textChannels.length} text-based channels`);
 
   // Fetch all threads
-  console.log("Fetching threads...");
   const allThreads = await fetchAllThreads(guildId, textChannels);
-  console.log(`Found ${allThreads.length} threads\n`);
+  console.log(`Found ${allThreads.length} threads total\n`);
+
+  // Build channel tree with threads
+  console.log("Estimating message counts...");
+  const channelTree: ChannelWithEstimate[] = [];
+
+  for (const channel of textChannels) {
+    const estimate = await estimateMessageCount(channel.id);
+
+    // Get threads belonging to this channel
+    const channelThreads = allThreads.filter((t) => t.parent_id === channel.id);
+    const threadsWithEstimates: ThreadWithEstimate[] = [];
+
+    for (const thread of channelThreads) {
+      const threadEstimate = await estimateMessageCount(thread.id);
+      threadsWithEstimates.push({ thread, estimate: threadEstimate });
+    }
+
+    // Sort threads by size (smallest first)
+    threadsWithEstimates.sort((a, b) => a.estimate - b.estimate);
+
+    channelTree.push({
+      channel,
+      estimate,
+      threads: threadsWithEstimates,
+    });
+  }
+
+  // Sort channels by size (smallest first), "general" last
+  channelTree.sort((a, b) => {
+    const aIsGeneral = a.channel.name.toLowerCase() === "general";
+    const bIsGeneral = b.channel.name.toLowerCase() === "general";
+    if (aIsGeneral && !bIsGeneral) return 1;
+    if (!aIsGeneral && bIsGeneral) return -1;
+    return a.estimate - b.estimate;
+  });
 
   let totalMessages = 0;
   let totalThreads = 0;
   const startTime = Date.now();
+  const totalChannels = channelTree.length;
 
-  // Phase 1: Wipe thread messages (threads are deleted with parent channel)
-  if (allThreads.length > 0) {
-    console.log("Phase 1: Wiping threads...\n");
+  console.log("\nProcessing channels (leaves first)...\n");
 
-    const threadsWithEstimates: ThreadWithEstimate[] = [];
-    for (const thread of allThreads) {
-      const estimate = await estimateMessageCount(thread.id);
-      threadsWithEstimates.push({ thread, estimate });
-    }
+  // Process each channel: threads first, then channel, then delete
+  for (let i = 0; i < channelTree.length; i++) {
+    const { channel, estimate, threads } = channelTree[i]!;
+    const position = i + 1;
 
-    // Sort by estimate (ascending)
-    threadsWithEstimates.sort((a, b) => a.estimate - b.estimate);
+    console.log(
+      `[${position}/${totalChannels}] #${channel.name} (est. ${estimate} msgs, ${threads.length} threads)`
+    );
 
-    for (let i = 0; i < threadsWithEstimates.length; i++) {
-      const { thread, estimate } = threadsWithEstimates[i]!;
-      const position = i + 1;
+    // Step 1: Wipe threads (leaves) first
+    for (let j = 0; j < threads.length; j++) {
+      const { thread, estimate: threadEstimate } = threads[j]!;
 
       console.log(
-        `[${position}/${allThreads.length}] Thread: ${thread.name} (est. ${estimate} messages)`
+        `  └─ Thread: ${thread.name} (est. ${threadEstimate} msgs)`
       );
 
-      const stats = await wipeThreadMessages(thread.id, thread.name, (bulk, ind) => {
-        process.stdout.write(`\r  Deleted: ${bulk} bulk, ${ind} individual`);
-      });
+      const threadStats = await wipeThreadMessages(
+        thread.id,
+        thread.name,
+        (bulk, ind) => {
+          process.stdout.write(`\r     Deleted: ${bulk} bulk, ${ind} individual`);
+        }
+      );
 
-      process.stdout.write("\r" + " ".repeat(50) + "\r");
-      console.log(`  Bulk deleted: ${stats.bulkDeleted}`);
-      console.log(`  Individual deleted: ${stats.individualDeleted}`);
-      console.log(`  Done in ${formatTime(stats.timeMs)}\n`);
+      process.stdout.write("\r" + " ".repeat(60) + "\r");
+      const threadTotal = threadStats.bulkDeleted + threadStats.individualDeleted;
+      console.log(
+        `     Wiped ${threadTotal} messages in ${formatTime(threadStats.timeMs)}`
+      );
 
-      totalMessages += stats.bulkDeleted + stats.individualDeleted;
+      totalMessages += threadTotal;
       totalThreads++;
     }
-  }
 
-  // Phase 2: Wipe and delete channels
-  if (textChannels.length === 0) {
-    console.log("No text channels to cleanse.");
-  } else {
-    console.log("Phase 2: Wiping and deleting channels...\n");
-
-    const channelsWithEstimates: ChannelWithEstimate[] = [];
-    for (const channel of textChannels) {
-      const estimate = await estimateMessageCount(channel.id);
-      channelsWithEstimates.push({ channel, estimate });
-    }
-
-    // Sort by estimate (ascending) but keep "general" for last
-    channelsWithEstimates.sort((a, b) => {
-      const aIsGeneral = a.channel.name.toLowerCase() === "general";
-      const bIsGeneral = b.channel.name.toLowerCase() === "general";
-      if (aIsGeneral && !bIsGeneral) return 1;
-      if (!aIsGeneral && bIsGeneral) return -1;
-      return a.estimate - b.estimate;
-    });
-
-    const totalChannels = channelsWithEstimates.length;
-
-    for (let i = 0; i < channelsWithEstimates.length; i++) {
-      const { channel, estimate } = channelsWithEstimates[i]!;
-      const position = i + 1;
-
-      console.log(
-        `[${position}/${totalChannels}] #${channel.name} (est. ${estimate} messages)`
-      );
-
-      const stats = await wipeChannel(channel.id, channel.name, (bulk, ind) => {
+    // Step 2: Wipe channel messages and delete channel
+    const channelStats = await wipeChannel(
+      channel.id,
+      channel.name,
+      (bulk, ind) => {
         process.stdout.write(`\r  Deleted: ${bulk} bulk, ${ind} individual`);
-      });
+      }
+    );
 
-      process.stdout.write("\r" + " ".repeat(50) + "\r");
-      console.log(`  Bulk deleted: ${stats.bulkDeleted}`);
-      console.log(`  Individual deleted: ${stats.individualDeleted}`);
-      console.log(`  Channel deleted`);
-      console.log(`  Done in ${formatTime(stats.timeMs)}\n`);
+    process.stdout.write("\r" + " ".repeat(60) + "\r");
+    const channelTotal = channelStats.bulkDeleted + channelStats.individualDeleted;
+    console.log(`  Wiped ${channelTotal} messages`);
+    console.log(`  Channel deleted`);
+    console.log(`  Done in ${formatTime(channelStats.timeMs)}\n`);
 
-      totalMessages += stats.bulkDeleted + stats.individualDeleted;
-    }
+    totalMessages += channelTotal;
   }
 
   // Final summary
   const totalTime = Date.now() - startTime;
   console.log("─".repeat(50));
   console.log(
-    `Completed: ${totalMessages.toLocaleString()} messages, ${totalThreads} threads, ${textChannels.length} channels deleted in ${formatTime(totalTime)}`
+    `Completed: ${totalMessages.toLocaleString()} messages, ${totalThreads} threads, ${totalChannels} channels in ${formatTime(totalTime)}`
   );
 }

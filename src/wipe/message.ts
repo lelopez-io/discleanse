@@ -28,6 +28,7 @@ export async function deleteChannelMessages(
 
   while (hasMore) {
     const messages = await getChannelMessages(channelId, lastMessageId);
+    console.log(`  Fetched ${messages.length} messages`);
 
     if (messages.length === 0) {
       hasMore = false;
@@ -47,6 +48,7 @@ export async function deleteChannelMessages(
         recent.push(msg.id);
       }
     }
+    console.log(`  Recent: ${recent.length}, Old: ${old.length}`);
 
     // Bulk delete recent messages (2-100 at a time)
     if (recent.length >= 2) {
