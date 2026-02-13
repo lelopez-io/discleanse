@@ -82,6 +82,8 @@ export async function getChannelMessages(
   channelId: string,
   before?: string
 ): Promise<Message[]> {
+  // Small delay to avoid rate limits during pagination
+  if (before) await sleep(350);
   const query = before ? `?limit=100&before=${before}` : "?limit=100";
   return request<Message[]>("GET", `/channels/${channelId}/messages${query}`);
 }
@@ -98,7 +100,6 @@ export async function deleteMessage(
   } catch (error) {
     // Skip system messages that can't be deleted (code 50021)
     if (error instanceof Error && error.message.includes("50021")) {
-      console.log(`  (skipped system message ${messageId})`);
       return false;
     }
     throw error;
