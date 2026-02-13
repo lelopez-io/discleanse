@@ -1,6 +1,6 @@
 // Channel deletion logic
 
-import { getChannelMessages, deleteChannel } from "../discord/client";
+import { getChannelMessages, deleteChannel, unarchiveThread } from "../discord/client";
 import { deleteChannelMessages } from "./message";
 import type { ChannelStats } from "../discord/types";
 
@@ -35,6 +35,13 @@ export async function wipeThreadMessages(
   threadName: string,
   onProgress?: (bulk: number, individual: number) => void
 ): Promise<ChannelStats> {
+  // Unarchive thread first (archived threads can't be modified)
+  try {
+    await unarchiveThread(threadId);
+  } catch {
+    // Thread may already be unarchived or we lack permission
+  }
+
   const stats = await deleteChannelMessages(threadId, onProgress);
 
   return {

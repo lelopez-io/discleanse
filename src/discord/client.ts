@@ -133,3 +133,7 @@ export async function getArchivedPrivateThreads(
     `/channels/${channelId}/threads/archived/private`
   );
 }
+
+export async function unarchiveThread(threadId: string): Promise<void> {
+  await request<unknown>("PATCH", `/channels/${threadId}`, { archived: false });
+}
