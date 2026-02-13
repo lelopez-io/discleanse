@@ -90,8 +90,8 @@ export async function deleteMessage(
   channelId: string,
   messageId: string
 ): Promise<boolean> {
-  // Conservative rate limiting for individual deletes (~3/sec)
-  await sleep(350);
+  // Conservative rate limiting for individual deletes (~1/sec to avoid 429s)
+  await sleep(1100);
   try {
     await request<void>("DELETE", `/channels/${channelId}/messages/${messageId}`);
     return true;
