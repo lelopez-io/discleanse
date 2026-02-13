@@ -28,3 +28,18 @@ export async function wipeChannel(
     ...stats,
   };
 }
+
+// Wipe thread messages only (thread is deleted with parent channel)
+export async function wipeThreadMessages(
+  threadId: string,
+  threadName: string,
+  onProgress?: (bulk: number, individual: number) => void
+): Promise<ChannelStats> {
+  const stats = await deleteChannelMessages(threadId, onProgress);
+
+  return {
+    channelId: threadId,
+    channelName: threadName,
+    ...stats,
+  };
+}
