@@ -1,0 +1,30 @@
+// Channel deletion logic
+
+import { getChannelMessages, deleteChannel } from "../discord/client";
+import { deleteChannelMessages } from "./message";
+import type { ChannelStats } from "../discord/types";
+
+export async function estimateMessageCount(channelId: string): Promise<number> {
+  // Fetch first batch to get an estimate
+  // This is imprecise but gives a rough idea for sorting
+  const messages = await getChannelMessages(channelId);
+  // If we got 100, there are likely more
+  return messages.length === 100 ? 100 : messages.length;
+}
+
+export async function wipeChannel(
+  channelId: string,
+  channelName: string,
+  onProgress?: (bulk: number, individual: number) => void
+): Promise<ChannelStats> {
+  const stats = await deleteChannelMessages(channelId, onProgress);
+
+  // Delete the channel itself
+  await deleteChannel(channelId);
+
+  return {
+    channelId,
+    channelName,
+    ...stats,
+  };
+}
