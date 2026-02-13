@@ -1,0 +1,11 @@
+[tools]
+bun = "latest"
+
+[tasks.setup]
+description = "First-time setup: install tools, dependencies, and git hooks"
+run = [
+  "mise install",
+  "ln -sf ../../.githooks/post-commit .git/hooks/post-commit",
+  "chmod +x .githooks/post-commit",
+  "bun install"
+]
