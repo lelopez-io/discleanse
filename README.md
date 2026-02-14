@@ -1,71 +1,54 @@
 # discleanse
 
-CLI tool to cleanse a Discord server before leaving the platform. Deletes all messages and channels.
+CLI tool to cleanse a Discord server before leaving the platform. Deletes all messages, text channels, and voice channels.
 
-## Setup
+This project uses [mise](https://mise.jdx.dev/) to manage Bun versions automatically.
 
-### 1. Configure Environment
+## Quick Start
+
+### System Dependencies
+
+1. **Install mise for version management:**
 
 ```bash
+brew install mise
+```
+
+2. **Add mise to your shell (add to your `~/.zshrc`):**
+
+```bash
+eval "$(mise activate zsh)"
+```
+
+3. **Restart your shell or source your config:**
+
+```bash
+source ~/.zshrc
+```
+
+### Project Setup
+
+```bash
+mise trust
+mise run setup
 cp .env.example .env
 ```
 
-### 2. Get Your Server ID
+Then configure your `.env` with your Discord bot token and server ID. See [Discord Setup](docs/DISCORD_SETUP.md) for detailed instructions.
 
-1. In Discord, enable Developer Mode (Settings → App Settings → Advanced → Developer Mode)
-2. Right-click your server name → **Copy Server ID**
-3. Paste into `.env` as `DISCORD_GUILD_ID`
-
-### 3. Create a Discord Bot
-
-1. Go to [discord.com/developers/applications](https://discord.com/developers/applications)
-2. Click **New Application**, give it a name
-3. Go to **Bot** section in the sidebar
-4. Click **Reset Token** and copy it
-5. Paste into `.env` as `DISCORD_TOKEN`
-
-### 4. Invite the Bot to Your Server
-
-1. Go to **OAuth2** in the sidebar, scroll to **URL Generator**
-2. Under **Scopes**, check `bot`
-3. Under **Bot Permissions**, check `Administrator`
-4. Copy the generated URL and open it
-5. Select your server and authorize
-
-## Usage
+### Usage
 
 ```bash
 bun run src/index.ts
 ```
 
-The tool will:
-1. Connect to your server
-2. Find all text channels and threads
-3. Sort by message count (smallest first, "general" last)
-4. For each channel: wipe threads first, then the channel, then delete
-5. Print a summary
+---
 
-## Options
+## Additional Documentation
 
-### Ignore Channels
+- [Discord Setup](docs/DISCORD_SETUP.md) - Bot creation, server ID, and configuration
+- [Architecture](docs/ARCHITECTURE.md) - How the tool works and processing strategy
 
-To skip specific channels, add their IDs to `.env`:
+## License
 
-```
-DISCORD_IGNORE_CHANNELS=123456789,987654321
-```
-
-Get a channel ID by right-clicking it in Discord (with Developer Mode enabled).
-
-## How It Works
-
-- **Tree traversal**: Messages in threads → messages in channels → delete channels
-- **Bulk first**: Recent messages (<2 weeks) are bulk deleted fast
-- **Then old**: Older messages are deleted one by one (~1/sec)
-- **Rate limiting**: Automatically handles Discord's rate limits
-- **Threads**: Handles active and archived threads (public + private)
-
-## Requirements
-
-- [Bun](https://bun.sh) runtime
-- You must be the server owner (or have a bot with Administrator permission)
+MIT License - see LICENSE file.
