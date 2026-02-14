@@ -1,5 +1,7 @@
 # discleanse
 
+![discleanse banner](.github/assets/banner.jpg)
+
 CLI tool to cleanse a Discord server before leaving the platform. Deletes all messages, text channels, and voice channels.
 
 This project uses [mise](https://mise.jdx.dev/) to manage Bun versions automatically.
