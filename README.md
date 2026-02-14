@@ -45,13 +45,24 @@ The tool will:
 4. For each channel: wipe threads first, then the channel, then delete
 5. Print a summary
 
+## Options
+
+### Ignore Channels
+
+To skip specific channels, add their IDs to `.env`:
+
+```
+DISCORD_IGNORE_CHANNELS=123456789,987654321
+```
+
+Get a channel ID by right-clicking it in Discord (with Developer Mode enabled).
+
 ## How It Works
 
 - **Tree traversal**: Messages in threads → messages in channels → delete channels
-- **Oldest first**: Old messages (>2 weeks) are deleted first, then recent ones
-- **Bulk delete**: Recent messages (<2 weeks) are deleted in batches of 100
-- **Individual delete**: Older messages are deleted one by one (~3/sec)
-- **Rate limiting**: Automatically handles Discord's rate limits with retries
+- **Bulk first**: Recent messages (<2 weeks) are bulk deleted fast
+- **Then old**: Older messages are deleted one by one (~1/sec)
+- **Rate limiting**: Automatically handles Discord's rate limits
 - **Threads**: Handles active and archived threads (public + private)
 
 ## Requirements

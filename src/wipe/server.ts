@@ -56,6 +56,12 @@ function isTextBasedChannel(type: number): boolean {
   );
 }
 
+function getIgnoredChannels(): Set<string> {
+  const envValue = process.env.DISCORD_IGNORE_CHANNELS ?? "";
+  const ids = envValue.split(",").map((id) => id.trim()).filter(Boolean);
+  return new Set(ids);
+}
+
 async function fetchAllThreads(
   guildId: string,
   channels: Channel[]
@@ -95,9 +101,15 @@ export async function cleanseServer(guildId: string): Promise<void> {
   console.log(`Guild: ${guild.name} (${guild.id})\n`);
 
   // Get all text-based channels
+  const ignoredChannels = getIgnoredChannels();
   const allChannels = await getGuildChannels(guildId);
-  const textChannels = allChannels.filter((c) => isTextBasedChannel(c.type));
+  const textChannels = allChannels.filter(
+    (c) => isTextBasedChannel(c.type) && !ignoredChannels.has(c.id)
+  );
   console.log(`Found ${textChannels.length} text-based channels`);
+  if (ignoredChannels.size > 0) {
+    console.log(`Ignoring ${ignoredChannels.size} channel(s) from DISCORD_IGNORE_CHANNELS`);
+  }
 
   // Fetch all threads
   console.log(`Fetching threads...`);
@@ -116,6 +128,9 @@ export async function cleanseServer(guildId: string): Promise<void> {
   }
 
   for (const thread of allThreads) {
+    // Skip threads in ignored channels
+    if (ignoredChannels.has(thread.parent_id)) continue;
+
     // Unarchive thread first
     try {
       await unarchiveThread(thread.id);
