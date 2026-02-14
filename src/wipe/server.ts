@@ -51,6 +51,7 @@ function formatEta(seconds: number): string {
 function isTextBasedChannel(type: number): boolean {
   return (
     type === ChannelType.GUILD_TEXT ||
+    type === ChannelType.GUILD_VOICE ||
     type === ChannelType.GUILD_ANNOUNCEMENT ||
     type === ChannelType.GUILD_FORUM
   );
@@ -262,7 +263,7 @@ export async function cleanseServer(guildId: string): Promise<void> {
       process.stdout.write(`\r${target.name}: ${deleted} deleted${" ".repeat(30)}\n`);
     }
 
-    // Channel is now empty (leaf) - delete it
+    // Channel is now empty - delete it
     await deleteChannel(target.id);
     console.log(`  → deleted ${target.name}`);
     channelsDeleted++;
